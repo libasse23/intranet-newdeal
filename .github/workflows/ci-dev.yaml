@@ -9,9 +9,6 @@ on:
       - dev
 
 jobs:
-  # ─────────────────────────────────────────────
-  # JOB 1 : Build de l'image Docker
-  # ─────────────────────────────────────────────
   build:
     name: Build Image Docker
     runs-on: ubuntu-latest
@@ -44,9 +41,6 @@ jobs:
           path: intranet-image.tar
           retention-days: 1
 
-  # ─────────────────────────────────────────────
-  # JOB 2 : Scan de sécurité (vulnérabilités + secrets)
-  # ─────────────────────────────────────────────
   security-scan:
     name: Scan Sécurité
     runs-on: ubuntu-latest
@@ -64,7 +58,6 @@ jobs:
       - name: Charger l'image Docker
         run: docker load -i intranet-image.tar
 
-      # Scan des vulnérabilités avec Trivy
       - name: Installer Trivy
         run: |
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -75,27 +68,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      - name: Scan des vulnérabilités de l'image (Trivy)
+      - name: Scan des vulnérabilités LOW/MEDIUM/HIGH
         run: |
           trivy image --exit-code 0 \
-            --severity LOW,MEDIUM,HIGH,CRITICAL \
+            --severity LOW,MEDIUM,HIGH \
             --format table \
             ${{ secrets.DOCKERHUB_USERNAME }}/intranet-newdeal:dev-latest
 
-      # Scan des secrets dans le code source avec Gitleaks
+      - name: Bloquer si vulnérabilité CRITICAL
+        run: |
+          trivy image --exit-code 1 \
+            --severity CRITICAL \
+            --format table \
+            ${{ secrets.DOCKERHUB_USERNAME }}/intranet-newdeal:dev-latest
+
       - name: Installer Gitleaks
         run: |
           wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
           tar -xzf gitleaks_8.18.4_linux_x64.tar.gz
           sudo mv gitleaks /usr/local/bin/
 
-      - name: Scan des secrets dans le code source (Gitleaks)
+      - name: Scan des secrets (Gitleaks)
         run: |
-         gitleaks detect --source . --verbose --no-git || true
+          gitleaks detect --source . --verbose --no-git || true
 
-  # ─────────────────────────────────────────────
-  # JOB 3 : Push de l'image vers Docker Hub
-  # ─────────────────────────────────────────────
   push:
     name: Push vers Docker Hub
     runs-on: ubuntu-latest
@@ -125,3 +121,37 @@ jobs:
           echo "✅ Image pushée avec succès !"
           echo "🐳 Image : ${{ secrets.DOCKERHUB_USERNAME }}/intranet-newdeal:dev-latest"
           echo "🔖 SHA   : ${{ github.sha }}"
+
+  notify:
+    name: Notification Email
+    runs-on: ubuntu-latest
+    needs: [build, security-scan, push]
+    if: always()
+
+    steps:
+      - name: Envoyer email de notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "[Intranet NewDeal] Pipeline Dev - ${{ needs.push.result == 'success' && '✅ SUCCÈS' || '❌ ÉCHEC' }}"
+          to: moussawade@groupeisi.com
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            Bonjour,
+
+            Rapport pipeline CI (branche dev) :
+
+            📦 Build     : ${{ needs.build.result }}
+            🔐 Scan sécu : ${{ needs.security-scan.result }}
+            🚀 Push Hub  : ${{ needs.push.result }}
+
+            🔖 Commit  : ${{ github.sha }}
+            👤 Auteur  : ${{ github.actor }}
+            🌿 Branche : ${{ github.ref_name }}
+
+            Cordialement,
+            Pipeline CI/CD – Intranet Gouvernemental Sénégal 🇸🇳
