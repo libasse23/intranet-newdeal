@@ -127,6 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, security-scan, push]
     if: always()
+    continue-on-error: true
 
     steps:
       - name: Envoyer email de notification
