@@ -91,7 +91,7 @@ jobs:
 
       - name: Scan des secrets dans le code source (Gitleaks)
         run: |
-          gitleaks detect --source . --verbose --no-git
+          gitleaks detect --source . --verbose --no-git --gitleaks-ignore-path .gitleaksignore
 
   # ─────────────────────────────────────────────
   # JOB 3 : Push de l'image vers Docker Hub
