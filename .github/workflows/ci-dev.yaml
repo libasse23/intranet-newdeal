@@ -118,7 +118,6 @@ jobs:
 
       - name: Push de l'image vers Docker Hub
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/intranet-newdeal:dev-${{ github.sha }}
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/intranet-newdeal:dev-latest
 
       - name: Résumé du build
